@@ -20,9 +20,13 @@ line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(CHANNEL_SECRET)
 
 # 初始化 Gemini
+model = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except:
+        pass
 
 def search_ragic(keyword):
     try:
@@ -46,7 +50,7 @@ def ask_ai_repair(user_query):
     # 1. 先去 Ragic 找相关资料
     records = search_ragic(user_query)
     
-    # 2. 整理资料给 AI (如果没有记录，就告诉 AI 没记录，让它凭常识回答)
+    # 2. 整理资料给 AI
     if not records:
         context_text = "（数据库中未找到相关维修记录）"
     else:
@@ -56,6 +60,13 @@ def ask_ai_repair(user_query):
             fix = rec.get("處理紀錄", "無記錄")
             model_name = rec.get("機台型號", "未知")
             context_text += f"案例{i+1}: 机型[{model_name}] 问题[{problem}] -> 处理[{fix}]\n"
+
+    # 如果 AI 没初始化，直接返回原始数据
+    if not model:
+        if records:
+            return f"（AI 未啟用，顯示原始记录）\n{context_text}"
+        else:
+            return "找不到相关记录。"
 
     # 3. 让 AI 思考
     prompt = f"""
