@@ -21,12 +21,16 @@ handler = WebhookHandler(CHANNEL_SECRET)
 
 # 初始化 Gemini
 model = None
+init_error = "No Key"
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-    except:
-        pass
+        # 换回 gemini-pro (1.0) 试试
+        model = genai.GenerativeModel('gemini-pro')
+        init_error = None
+    except Exception as e:
+        init_error = str(e)
+        print(f"Gemini Init Error: {e}")
 
 def search_ragic(keyword):
     try:
@@ -61,12 +65,13 @@ def ask_ai_repair(user_query):
             model_name = rec.get("機台型號", "未知")
             context_text += f"案例{i+1}: 机型[{model_name}] 问题[{problem}] -> 处理[{fix}]\n"
 
-    # 如果 AI 没初始化，直接返回原始数据
+    # 如果 AI 没初始化，直接返回原始数据 + 错误信息
     if not model:
+        err = f"AI Error: {init_error}" if init_error else "AI Not Init"
         if records:
-            return f"（AI 未啟用，顯示原始记录）\n{context_text}"
+            return f"（{err}，顯示原始记录）\n{context_text}"
         else:
-            return "找不到相关记录。"
+            return f"找不到相关记录。({err})"
 
     # 3. 让 AI 思考
     prompt = f"""
