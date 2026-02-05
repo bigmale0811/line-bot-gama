@@ -32,7 +32,47 @@ if GEMINI_API_KEY:
         init_error = str(e)
         print(f"Gemini Init Error: {e}")
 
+# 加载本地知识库
+KNOWLEDGE_FILE = "knowledge.json"
+knowledge_base = []
+if os.path.exists(KNOWLEDGE_FILE):
+    try:
+        with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
+            knowledge_base = json.load(f)
+        print(f"Loaded {len(knowledge_base)} records from knowledge base.")
+    except Exception as e:
+        print(f"Failed to load knowledge base: {e}")
+
 def search_ragic(keyword):
+    # 优先从本地知识库搜索
+    if knowledge_base:
+        results = []
+        keyword = keyword.lower()
+        for rec in knowledge_base:
+            # 搜索问题和解决描述
+            prob = rec.get("problem", "") # 注意 ETL 脚本用的 key 是 problem
+            sol = rec.get("solution", "") # key 是 solution
+            
+            # 为了兼容 app.py 之前的逻辑，我们这里做个 key 映射
+            # 原始 app.py 期待: "發生問題", "處理紀錄", "機台型號"
+            # 昨晚 ETL 生成的 key: "problem", "solution", "model"
+            
+            if keyword in prob.lower() or keyword in sol.lower():
+                # 转换格式，让后续逻辑通用
+                mapped_rec = {
+                    "發生問題": prob,
+                    "處理紀錄": sol,
+                    "機台型號": rec.get("model", "未知"),
+                    "date": rec.get("date", "")
+                }
+                results.append(mapped_rec)
+                
+            # 限制返回数量 (比如只取前 20 条最相关的？这里是简单包含搜索)
+            if len(results) >= 20:
+                break
+        return results
+
+    # 如果本地没有，才去查 API (Fallback)
     try:
         params = {
             "api": "",
