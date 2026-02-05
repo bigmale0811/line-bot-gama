@@ -25,8 +25,8 @@ init_error = "No Key"
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # 换回 gemini-pro (1.0) 试试
-        model = genai.GenerativeModel('gemini-pro')
+        # 换用 gemini-flash-lite-latest (因为 Key 权限问题)
+        model = genai.GenerativeModel('gemini-flash-lite-latest')
         init_error = None
     except Exception as e:
         init_error = str(e)
