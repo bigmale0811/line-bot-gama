@@ -50,19 +50,22 @@ def search_ragic(keyword):
         keyword = keyword.lower()
         for rec in knowledge_base:
             # 搜索问题和解决描述
-            prob = rec.get("problem", "") # 注意 ETL 脚本用的 key 是 problem
-            sol = rec.get("solution", "") # key 是 solution
+            prob = rec.get("problem", "") 
+            sol = rec.get("solution", "") 
+            store = rec.get("store", "")
+            model_name = rec.get("model", "")
             
-            # 为了兼容 app.py 之前的逻辑，我们这里做个 key 映射
-            # 原始 app.py 期待: "發生問題", "處理紀錄", "機台型號"
-            # 昨晚 ETL 生成的 key: "problem", "solution", "model"
-            
-            if keyword in prob.lower() or keyword in sol.lower():
-                # 转换格式，让后续逻辑通用
+            # 全方位搜索：问题、解决、店名、机型
+            if (keyword in prob.lower() or 
+                keyword in sol.lower() or 
+                keyword in store.lower() or 
+                keyword in model_name.lower()):
+                
                 mapped_rec = {
                     "發生問題": prob,
                     "處理紀錄": sol,
-                    "機台型號": rec.get("model", "未知"),
+                    "機台型號": model_name,
+                    "店家": store,  # 把店名也带上
                     "date": rec.get("date", "")
                 }
                 results.append(mapped_rec)
@@ -115,17 +118,19 @@ def ask_ai_repair(user_query):
 
     # 3. 让 AI 思考
     prompt = f"""
-    你是一个资深的维修技术顾问。用户遇到了这个问题："{user_query}"
+    角色：GAMA 公司的內部維修技術顧問。
+    用戶提問："{user_query}"
     
-    请根据以下【公司历史维修案例】来回答。
+    【任務】：
+    請根據以下【歷史維修案例】來回答用戶。
     
-    【规则】：
-    1. 如果有历史案例，请总结案例中的解决方法，并注明“根据历史记录...”。
-    2. 如果没有历史案例（或案例不相关），请运用你的通用维修知识给出建议，并注明“数据库中暂无此类记录，建议...”。
-    3. 如果用户只是在打招呼（如你好、早安），请友善回复，不要强行解释故障。
-    4. 回答要简练、专业、有条理。
+    【嚴格規則】：
+    1. **絕對禁止** 聯想到外部事物（例如：不要把 A4 當成奧迪汽車或紙張，它是店鋪代碼）。
+    2. 你的知識邊界僅限於提供的這些案例。
+    3. 如果案例裡沒有相關信息，請直接回答：「資料庫中暫無關於 '{user_query}' 的記錄。」
+    4. 如果用戶問的是店家（如 A4），請總結該店家近期常發生的問題。
     
-    【历史案例】：
+    【歷史案例】：
     {context_text}
     """
     
