@@ -53,7 +53,8 @@ def fetch_and_clean():
                 "APIKey": API_KEY,
                 "limit": limit,
                 "offset": offset,
-                "listing": "1"
+                "listing": "1",
+                "order": "DESC" # 尝试让它倒序 (最新在前) 抓取，看能不能抓到最新的
             }
             
             response = requests.get(BASE_URL, params=params, timeout=30)
