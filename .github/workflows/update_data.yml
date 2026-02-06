@@ -1,0 +1,35 @@
+name: Update Ragic Knowledge Base
+
+on:
+  schedule:
+    # 每周一 00:00 UTC (台湾时间 08:00) 运行
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run ETL script
+        env:
+          RAGIC_API_KEY: ${{ secrets.RAGIC_API_KEY }}
+        run: python etl.py
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add knowledge.zip
+          git commit -m "Auto-update knowledge base" || echo "No changes to commit"
+          git push
