@@ -32,50 +32,90 @@ if GEMINI_API_KEY:
         init_error = str(e)
         print(f"Gemini Init Error: {e}")
 
-# 加载本地知识库
-KNOWLEDGE_FILE = "knowledge.json"
-knowledge_base = []
-if os.path.exists(KNOWLEDGE_FILE):
-    try:
-        with open(KNOWLEDGE_FILE, "r", encoding="utf-8") as f:
-            knowledge_base = json.load(f)
-        print(f"Loaded {len(knowledge_base)} records from knowledge base.")
-    except Exception as e:
-        print(f"Failed to load knowledge base: {e}")
+import zipfile
+import re
 
-def search_ragic(keyword):
+# 加载本地知识库 (ZIP 压缩版)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ZIP_FILE = os.path.join(BASE_DIR, "knowledge.zip")
+JSON_FILE = "knowledge.json"
+knowledge_base = []
+kb_status = "Init"
+
+try:
+    # 1. 检查 ZIP
+    if os.path.exists(ZIP_FILE):
+        kb_status = "ZIP Found"
+        # 2. 解压
+        with zipfile.ZipFile(ZIP_FILE, 'r') as zip_ref:
+            zip_ref.extractall(BASE_DIR)
+        kb_status = "Unzipped"
+        
+        # 3. 读取 JSON
+        json_path = os.path.join(BASE_DIR, JSON_FILE)
+        if os.path.exists(json_path):
+            with open(json_path, "r", encoding="utf-8") as f:
+                knowledge_base = json.load(f)
+            kb_status = f"Loaded ({len(knowledge_base)})"
+        else:
+            kb_status = "JSON Missing after unzip"
+    else:
+        kb_status = "ZIP Missing"
+except Exception as e:
+    kb_status = f"Error: {str(e)}"
+    print(kb_status)
+
+def search_ragic(user_query):
     # 优先从本地知识库搜索
     if knowledge_base:
         results = []
-        keyword = keyword.lower()
-        for rec in knowledge_base:
-            # 搜索问题和解决描述
-            prob = rec.get("problem", "") 
-            sol = rec.get("solution", "") 
-            store = rec.get("store", "")
-            model_name = rec.get("model", "")
+        user_query_upper = user_query.upper()
+        
+        # 1. 尝试提取店名 (格式: 字母+数字，如 T1, A4)
+        target_store = None
+        store_match = re.search(r'\b[A-Z][0-9]\b', user_query_upper)
+        if store_match:
+            target_store = store_match.group(0)
+            user_query_upper = user_query_upper.replace(target_store, "").strip()
             
-            # 全方位搜索：问题、解决、店名、机型
-            if (keyword in prob.lower() or 
-                keyword in sol.lower() or 
-                keyword in store.lower() or 
-                keyword in model_name.lower()):
+        # 2. 拆分剩余关键词
+        keywords = user_query_upper.split()
+        
+        for rec in knowledge_base:
+            prob = str(rec.get("problem", ""))
+            sol = str(rec.get("solution", ""))
+            store = str(rec.get("store", ""))
+            model_name = str(rec.get("model", ""))
+            
+            # A. 店名过滤 (如果用户指定了店名)
+            if target_store and target_store != store.upper():
+                continue 
                 
+            # B. 关键词匹配 (AND 逻辑)
+            # 只要包含所有关键词 (不区分大小写)
+            full_text = (prob + sol + model_name).upper()
+            match = True
+            for k in keywords:
+                if k not in full_text:
+                    match = False
+                    break
+            
+            if match:
                 mapped_rec = {
                     "發生問題": prob,
                     "處理紀錄": sol,
                     "機台型號": model_name,
-                    "店家": store,  # 把店名也带上
+                    "店家": store,
                     "date": rec.get("date", "")
                 }
                 results.append(mapped_rec)
                 
-            # 限制返回数量 (比如只取前 20 条最相关的？这里是简单包含搜索)
-            if len(results) >= 20:
+            if len(results) >= 10:
                 break
+                
         return results
 
-    # 如果本地没有，才去查 API (Fallback)
+    # Fallback to API... (下略)
     try:
         params = {
             "api": "",
@@ -108,20 +148,19 @@ def ask_ai_repair(user_query):
             model_name = rec.get("機台型號", "未知")
             context_text += f"案例{i+1}: 机型[{model_name}] 问题[{problem}] -> 处理[{fix}]\n"
 
-    # 如果 AI 没初始化，直接返回原始数据 + 错误信息
+    # 如果 AI 没初始化
     if not model:
         err = f"AI Error: {init_error}" if init_error else "AI Not Init"
         if records:
-            return f"（{err}，顯示原始记录）\n{context_text}"
+            return f"（{err}，KB: {kb_status}）\n{context_text}"
         else:
-            return f"找不到相关记录。({err})"
+            return f"找不到相关记录。\n(KB Status: {kb_status})\n({err})"
 
     # 3. 让 AI 思考
     prompt = f"""
     角色：GAMA 公司的內部維修技術顧問。
     用戶提問："{user_query}"
-    
-    【任務】：
+    (Debug: KB Status={kb_status}, Matches={len(records)})
     請根據以下【歷史維修案例】來回答用戶。
     
     【嚴格規則】：
